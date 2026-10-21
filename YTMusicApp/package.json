@@ -1,0 +1,25 @@
+{
+  "name": "ytmusicapp",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "vite build && bun server/index.ts",
+    "serve": "bun server/index.ts",
+    "build": "vite build",
+    "dev:server": "bun --watch server/index.ts",
+    "dev:web": "vite",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3",
+    "vite": "^8.3.4",
+    "vite-plugin-solid": "^2.11.14"
+  },
+  "peerDependencies": {
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.17",
+    "youtubei.js": "^18.2.0"
+  }
+}
