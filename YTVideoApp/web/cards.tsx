@@ -81,6 +81,13 @@ function Thumb(p: { c: Card; class?: string; preview?: boolean }) {
       <Show when={p.c.duration ?? p.c.badge}>
         <span class="badge">{p.c.duration ?? p.c.badge}</span>
       </Show>
+      <Show when={p.c.progress}>
+        {(pct) => (
+          <div class="thumb-progress">
+            <div style={{ width: `${pct()}%` }} />
+          </div>
+        )}
+      </Show>
     </div>
   );
 }

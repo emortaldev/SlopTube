@@ -1,4 +1,4 @@
-import { Helpers, Innertube, Log, Parser, YTNodes } from 'youtubei.js';
+import { Constants, Helpers, Innertube, Log, Parser, YTNodes } from 'youtubei.js';
 import type { SearchFilters } from '../shared/search';
 
 Log.setLevel(Log.Level.NONE);
@@ -53,6 +53,7 @@ export type Card = {
   published?: string;
   badge?: string; // "Mix", "24 videos"
   snippet?: string;
+  progress?: number; // % watched, from the signed-in account's history
   handle?: string; // channels only: "@name"
   subscribers?: string; // channels only
 };
@@ -75,6 +76,15 @@ function find(o: any, pred: (x: any) => boolean, depth = 0): any {
   for (const k in o) {
     const r = find(o[k], pred, depth + 1);
     if (r) return r;
+  }
+  return undefined;
+}
+
+/** Resume position (%) from either thumbnail overlay shape: lockups' progress bar or classic renderers' resume overlay. */
+function watchedPercent(overlays: any[] | undefined): number | undefined {
+  for (const o of overlays ?? []) {
+    const pct = o.progress_bar?.start_percent ?? o.percent_duration_watched;
+    if (typeof pct === 'number' && pct > 0) return pct;
   }
   return undefined;
 }
@@ -109,6 +119,7 @@ function fromLockup(l: any): Card | null {
     const dur = badgeText.find(isDuration);
     if (!dur) return null; // live/upcoming/shorts have no duration badge
     card.duration = dur;
+    card.progress = watchedPercent(tv?.overlays) ?? watchedPercent(l.content_image?.overlays);
     if (!channel && rest.length > 2) card.channel = { name: rest.shift()! };
     card.views = rest[0] ? withViews(rest[0]) : undefined;
     card.published = rest[1];
@@ -136,6 +147,7 @@ function fromVideo(v: any): Card | null {
     views: text(v.short_view_count) ? withViews(text(v.short_view_count)) : text(v.view_count),
     published: text(v.published),
     snippet: text(v.description_snippet) || text(v.snippets?.[0]?.text) || undefined,
+    progress: watchedPercent(v.thumbnail_overlays),
   };
 }
 
@@ -403,11 +415,75 @@ export async function relatedMore(token: string) {
   return collect([r.on_response_received_endpoints, r.on_response_received_actions, r.continuation_contents]);
 }
 
+/**
+ * One playback session per video: the history entry and the watch-time pings
+ * must share its cpn, or YouTube doesn't tie the progress to the view.
+ */
+type Session = {
+  info: Promise<Awaited<ReturnType<Innertube['getBasicInfo']>>>;
+  started: number;
+  expires: number;
+};
+const sessions = new Map<string, Session>();
+
+function session(id: string) {
+  const now = Date.now();
+  for (const [k, v] of sessions) if (v.expires < now) sessions.delete(k);
+  let s = sessions.get(id);
+  if (!s) {
+    const info = authed!.getBasicInfo(id).then(async (i) => (await i.addToWatchHistory(), i));
+    info.catch(() => sessions.delete(id));
+    s = { info, started: now, expires: 0 };
+    sessions.set(id, s);
+  }
+  s.expires = now + 6 * 3600_000;
+  return s;
+}
+
+/**
+ * Where youtube.com would resume this video for the signed-in account (seconds),
+ * from the player response's playbackStartConfig. The anonymous stream client
+ * can't see it, so this is a separate, lightweight WEB /player call.
+ */
+export async function resumePoint(id: string): Promise<number | undefined> {
+  if (!authed?.session.logged_in) return undefined;
+  const r: any = await authed.actions.execute('/player', { videoId: id, client: 'WEB' });
+  const s = Number(r.data?.playerConfig?.playbackStartConfig?.startSeconds);
+  return s > 0 ? s : undefined;
+}
+
 /** Record a view in the signed-in account's watch history, like youtube.com does. */
 export async function markWatched(id: string) {
   if (!authed || !HISTORY) return;
-  const info = await authed.getBasicInfo(id);
-  await info.addToWatchHistory();
+  await session(id).info;
+}
+
+/**
+ * Report a span actually played (seconds, st..et; et is also the current
+ * position) so YouTube's resume point and red progress bar follow it. Shaped
+ * like the web player's watch-time ping, with the session's real time (rt):
+ * YouTube appears to ignore spans longer than the time that has passed.
+ * youtubei.js's updateWatchTime always sends final=1, which YouTube treats as
+ * finished (100%), so that's only sent at the end. YouTube only keeps resume
+ * points for longer videos; short ones stay at "started" until finished.
+ */
+export async function reportProgress(id: string, st: number, et: number, ended = false) {
+  if (!authed || !HISTORY || !(st >= 0) || !(et >= st)) return;
+  const s = session(id);
+  const info: any = await s.info;
+  const t = et;
+  const url = info.page[0].playback_tracking.videostats_watchtime_url.replace('https://s.', 'https://www.');
+  const client = { client_name: Constants.CLIENTS.WEB.NAME, client_version: Constants.CLIENTS.WEB.VERSION };
+  const res: Response = await authed.actions.stats(url, client, {
+    cpn: info.cpn,
+    st: st.toFixed(3),
+    et: t.toFixed(3),
+    cmt: t.toFixed(3),
+    rt: ((Date.now() - s.started) / 1000).toFixed(3),
+    state: ended ? 'paused' : 'playing',
+    ...(ended && { final: '1' }),
+  });
+  if (!res.ok) throw new Error(`watchtime ping ${res.status}`);
 }
 
 // ---------- comments (cursor-based) ----------

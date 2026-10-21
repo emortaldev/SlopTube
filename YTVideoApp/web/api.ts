@@ -14,6 +14,7 @@ export type Card = {
   published?: string;
   badge?: string;
   snippet?: string;
+  progress?: number;
   handle?: string;
   subscribers?: string;
 };
@@ -94,7 +95,7 @@ export const api = {
   channel: (id: string) => get<ChannelPage>(`/api/channel/${enc(id)}`),
   channelSearch: (id: string, q: string) => get<Page>(`/api/channel/${enc(id)}/search?q=${enc(q)}`),
   play: (id: string, p: Prefs, signal?: AbortSignal) =>
-    get<{ formats: Fmt[]; details: Details }>(`/api/play/${id}?codec=${p.codec}&h=${p.maxHeight}`, { signal }),
+    get<{ formats: Fmt[]; details: Details; resume?: number }>(`/api/play/${id}?codec=${p.codec}&h=${p.maxHeight}`, { signal }),
   rate: (id: string, rating: Rating) => get<{ rating: Rating }>(`/api/like/${id}?rating=${rating}`, { method: 'PUT' }),
   downloadOptions: (id: string) => get<DownloadOption[]>(`/api/download/${id}/options`),
   downloadUrl: (id: string, key: string) => `/api/download/${id}?opt=${key}`,
@@ -102,6 +103,9 @@ export const api = {
   watchLaterIds: () => get<string[]>('/api/watchlater/ids'),
   setWatchLater: (id: string, on: boolean) => get<{ saved: boolean }>(`/api/watchlater/${id}`, { method: on ? 'PUT' : 'DELETE' }),
   watched: (id: string) => fetch(`/api/watched/${id}`, { method: 'POST' }).catch(() => {}),
+  /** Beacon, so the last report still goes out when the tab closes. */
+  progress: (id: string, st: number, et: number, ended = false) =>
+    navigator.sendBeacon(`/api/progress/${id}?st=${st.toFixed(1)}&et=${et.toFixed(1)}${ended ? '&ended=1' : ''}`),
   async auth(cookie: string) {
     const res = await fetch('/api/auth', { method: 'POST', body: JSON.stringify({ cookie }) });
     if (!res.ok) throw new Error((await res.json()).error);

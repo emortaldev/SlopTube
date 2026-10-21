@@ -77,17 +77,44 @@ export function Player(p: {
           setCountdown(null);
           setNeedsTap(false);
         });
+        // A view counts after 5s played from wherever playback started (set once known).
         let marked = false;
+        let markAt = Infinity;
         const mark = () => {
-          if (!marked && el.currentTime >= 5) {
+          if (!marked && el.currentTime >= markAt) {
             marked = true;
             api.watched(id);
           }
         };
+        // Watch progress for YouTube's resume point / red bar, once the view counts.
+        // Each report covers only what was actually played since the last one.
+        let spanStart = 0;
+        let lastPos = 0; // last position before any seek
+        let sentEnd = -1;
+        const report = (end = el.currentTime, ended = false) => {
+          if (!marked || end < spanStart || (!ended && end === sentEnd)) return;
+          api.progress(id, spanStart, end, ended);
+          sentEnd = end;
+          spanStart = end;
+        };
+        const track = () => !el.seeking && (lastPos = el.currentTime);
+        const reportNow = () => report();
+        const onSeeking = () => {
+          report(lastPos); // close the span played before the jump
+          spanStart = lastPos = el.currentTime;
+        };
+        const reportEnd = () => report(el.duration || duration(), true);
+        const tick = setInterval(() => !el.paused && report(), 30_000);
         el.addEventListener('timeupdate', mark);
+        el.addEventListener('timeupdate', track);
+        el.addEventListener('pause', reportNow);
+        el.addEventListener('seeking', onSeeking);
+        el.addEventListener('seeked', reportNow);
+        el.addEventListener('ended', reportEnd);
+        addEventListener('pagehide', reportNow);
         codecReady
           .then(() => api.play(id, prefs(), ctrl.signal))
-          .then(async ({ formats: fmts, details }) => {
+          .then(async ({ formats: fmts, details, resume }) => {
             if (ctrl.signal.aborted) return;
             const v = pickVideo(fmts, prefs());
             const a = pickAudio(fmts);
@@ -100,11 +127,23 @@ export function Player(p: {
             const e = new Engine(el, id);
             engine = e;
             e.onError = (err) => setError(err.message);
+            // An explicit ?t= wins; otherwise resume like youtube.com, unless (nearly) finished.
+            const at = p.startAt ?? (resume && resume < details.lengthSeconds - 10 ? resume : 0);
+            spanStart = lastPos = at;
+            markAt = at + 5;
             el.play().catch((err) => err.name === 'NotAllowedError' && setNeedsTap(true));
-            await e.start(v, a, p.startAt ?? 0);
+            await e.start(v, a, at);
           })
           .catch((err) => !ctrl.signal.aborted && setError(err.message));
         onCleanup(() => {
+          report(); // leaving this video
+          clearInterval(tick);
+          el.removeEventListener('timeupdate', track);
+          el.removeEventListener('pause', reportNow);
+          el.removeEventListener('seeking', onSeeking);
+          el.removeEventListener('seeked', reportNow);
+          el.removeEventListener('ended', reportEnd);
+          removeEventListener('pagehide', reportNow);
           ctrl.abort();
           el.removeEventListener('timeupdate', mark);
           engine?.destroy();

@@ -65,12 +65,20 @@ const server = Bun.serve({
         return new Response(null, { status: 204 });
       },
     },
+    '/api/progress/:id': {
+      POST: (req) => {
+        yt.reportProgress(req.params.id, Number(qp(req, 'st')), Number(qp(req, 'et')), qp(req, 'ended') === '1').catch(() => {});
+        return new Response(null, { status: 204 });
+      },
+    },
     /** Formats + basic details. Also warms the streams `prefs` would pick. */
     '/api/play/:id': guard(async (req) => {
       const id = req.params.id;
       prefetch(id, prefsOf(req));
+      // The resume point is per account and changes as you watch: fetched alongside, never cached.
+      const resume = yt.resumePoint(id).catch(() => undefined);
       const r = await resolve(id);
-      return json({ formats: r.formats, details: r.details });
+      return json({ formats: r.formats, details: r.details, resume: await resume });
     }),
     /** Hover prefetch: streams + watch-page data. */
     '/api/prefetch/:id': (req) => {
