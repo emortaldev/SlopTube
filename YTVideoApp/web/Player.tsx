@@ -51,6 +51,7 @@ export function Player(p: {
   const [hover, setHover] = createSignal<number | null>(null);
   const [board, setBoard] = createSignal<Storyboard>();
   const [countdown, setCountdown] = createSignal<number | null>(null);
+  const [flash, setFlash] = createSignal<{ icon: 'play' | 'pause' } | null>(null);
 
   const prefs = (): Prefs => {
     const q = quality();
@@ -227,6 +228,8 @@ export function Player(p: {
 
   const dur = () => duration() || el?.duration || 0;
   const toggle = () => {
+    // Fresh object each time so the keyed <Show> remounts and restarts the animation.
+    setFlash({ icon: el.paused ? 'play' : 'pause' });
     if (el.paused) {
       setCountdown(null);
       el.play().catch(() => {});
@@ -297,6 +300,13 @@ export function Player(p: {
 
       <Show when={waiting() && !error() && !needsTap() && countdown() === null}>
         <div class="p-spinner" />
+      </Show>
+      <Show when={flash()} keyed>
+        {(f) => (
+          <div class="p-flash" onAnimationEnd={() => setFlash(null)}>
+            <Icon name={f.icon} size={36} />
+          </div>
+        )}
       </Show>
       <Show when={needsTap()}>
         <button class="p-bigplay" onClick={toggle} aria-label="Play">

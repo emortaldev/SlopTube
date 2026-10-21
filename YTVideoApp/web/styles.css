@@ -949,6 +949,31 @@ button {
   background: var(--accent);
   color: #fff;
 }
+.p-flash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 64px;
+  height: 64px;
+  margin: -32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  pointer-events: none;
+  animation: p-flash 0.5s ease-out forwards;
+}
+@keyframes p-flash {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
 .p-error {
   position: absolute;
   inset: 0;
