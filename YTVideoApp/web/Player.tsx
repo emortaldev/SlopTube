@@ -32,6 +32,7 @@ export function Player(p: {
   let el!: HTMLVideoElement;
   let box!: HTMLDivElement;
   let bar!: HTMLDivElement;
+  let menuWrap!: HTMLDivElement;
   let engine: Engine | null = null;
 
   const [formats, setFormats] = createSignal<Fmt[]>([]);
@@ -209,6 +210,18 @@ export function Player(p: {
       clearTimeout(hiddenTimer);
       clearTimeout(idleTimer);
     });
+  });
+
+  // Close the settings menu on any press outside it. The video's own click handler
+  // closes it there, so playback doesn't also toggle.
+  createEffect(() => {
+    if (!menu()) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (!menuWrap.contains(t) && t !== el) setMenu(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    onCleanup(() => document.removeEventListener('pointerdown', onDown));
   });
 
   // Up-next countdown.
@@ -405,7 +418,7 @@ export function Player(p: {
           >
             <span class="p-toggle-knob" />
           </button>
-          <div class="p-menu-wrap">
+          <div ref={menuWrap} class="p-menu-wrap">
             <button class="p-btn" onClick={() => setMenu(!menu())} aria-label="Settings">
               <Icon name="settings" size={24} />
               <Show when={(current()?.height ?? 0) >= 720}>
