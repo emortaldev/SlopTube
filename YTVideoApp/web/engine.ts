@@ -15,6 +15,8 @@ import { parseIndex, type Seg } from './container';
  */
 
 const AHEAD = 30;
+/** Media errors (e.g. a decoder failing on a mid-stream resolution change) rebuild the pipeline this many times per video. */
+const MAX_RECOVERIES = 3;
 const BEHIND = 15;
 const APPEND_CHUNK = 192 * 1024;
 /** Enough for init + index of almost any file; parseIndex asks for more if needed. */
@@ -44,6 +46,11 @@ const once = (t: EventTarget, ev: string) => new Promise<void>((r) => t.addEvent
 export class Engine {
   private ms = new MediaSource();
   private url = URL.createObjectURL(this.ms);
+  private recoveries = 0;
+  /** Whether playback should be running. el.paused can already be true when 'error' fires, with no 'pause' event. */
+  private wantPlay = false;
+  private onPlay = () => (this.wantPlay = true);
+  private onPause = () => (this.wantPlay = false);
   private video = new Lane('video');
   private audio = new Lane('audio');
   private dead = false;
@@ -58,6 +65,43 @@ export class Engine {
     }
     this.pumpAll();
   };
+  /**
+   * Once the element has errored every append throws, so playback can't continue
+   * on this MediaSource. Rebuild it and resume from the same position, refetching
+   * only what's needed (the HTTP cache usually has it).
+   */
+  private onMediaError = () => {
+    if (this.dead || !this.video.media || !this.el.error) return;
+    if (++this.recoveries > MAX_RECOVERIES) {
+      this.onError?.(new Error(this.el.error.message || 'Playback failed'));
+      return;
+    }
+    const t = this.el.currentTime;
+    const resume = this.wantPlay;
+    for (const lane of [this.video, this.audio]) {
+      lane.gen++;
+      lane.ctrl.abort();
+      lane.ctrl = new AbortController();
+      lane.initDone = false;
+      lane.done = false;
+      lane.failures = 0;
+    }
+    URL.revokeObjectURL(this.url);
+    this.ms = new MediaSource();
+    this.url = URL.createObjectURL(this.ms);
+    this.el.src = this.url;
+    once(this.ms, 'sourceopen').then(() => {
+      if (this.dead) return;
+      this.ms.duration = Math.max(this.video.media.duration, this.audio.media.duration);
+      for (const lane of [this.video, this.audio]) {
+        lane.sb = this.ms.addSourceBuffer(lane.mime);
+        lane.next = segAt(lane.media.segs, t);
+      }
+      this.el.currentTime = t;
+      this.pumpAll();
+      if (resume) this.el.play().catch(() => {});
+    });
+  };
   onError?: (e: Error) => void;
 
   constructor(
@@ -67,6 +111,9 @@ export class Engine {
     el.src = this.url;
     el.addEventListener('timeupdate', this.onTime);
     el.addEventListener('seeking', this.onSeeking);
+    el.addEventListener('error', this.onMediaError);
+    el.addEventListener('play', this.onPlay);
+    el.addEventListener('pause', this.onPause);
   }
 
   get videoFormat() {
@@ -160,6 +207,9 @@ export class Engine {
     }
     this.el.removeEventListener('timeupdate', this.onTime);
     this.el.removeEventListener('seeking', this.onSeeking);
+    this.el.removeEventListener('error', this.onMediaError);
+    this.el.removeEventListener('play', this.onPlay);
+    this.el.removeEventListener('pause', this.onPause);
     this.el.removeAttribute('src');
     this.el.load();
     URL.revokeObjectURL(this.url);
@@ -204,7 +254,7 @@ export class Engine {
     this.feed(lane, lane.gen)
       .then(() => (lane.failures = 0))
       .catch((e) => {
-        if ((e as Error).name === 'AbortError' || this.dead) return;
+        if ((e as Error).name === 'AbortError' || this.dead || this.el.error) return;
         // Network blips / server restarts: retry with backoff before giving up.
         if (++lane.failures <= 6) setTimeout(() => this.pump(lane), 500 * lane.failures);
         else this.onError?.(e as Error);
