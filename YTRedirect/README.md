@@ -18,7 +18,7 @@ Requires Firefox 140+ (desktop) or 142+ (Android), or Chrome 121+. The same fold
 
 Firefox, temporary (removed when Firefox restarts): about:debugging#/runtime/this-firefox → Load Temporary Add-on → pick `manifest.json`.
 
-Chrome: chrome://extensions → Developer mode → Load unpacked → pick this folder. Chrome warns about the Firefox-only manifest keys (`browser_specific_settings`, `background.scripts`); that's expected.
+Chrome: chrome://extensions → Developer mode → Load unpacked → pick this folder. Chrome will warn about the Firefox-only manifest keys.
 
 If redirects don't happen in Firefox, check about:addons → this add-on → Permissions, and allow access to youtube.com and youtu.be.
 
