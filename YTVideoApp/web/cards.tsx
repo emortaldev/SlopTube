@@ -208,6 +208,29 @@ export function ListCard(p: { c: Card }) {
   );
 }
 
+/** Search result for a channel: round avatar in the thumbnail column, like YouTube. */
+export function ChannelCard(p: { c: Card }) {
+  const c = p.c;
+  return (
+    <div class="lcard ccard">
+      <a class="lcard-thumb ccard-avatar" href={href.channel(c.id)}>
+        <Show when={c.thumb}>
+          <img class="avatar" src={avatar(c.thumb, 136)} width="136" height="136" loading="lazy" alt="" />
+        </Show>
+      </a>
+      <div class="lcard-text">
+        <a href={href.channel(c.id)} class="title2 large" title={c.title}>
+          {c.title}
+        </a>
+        <div class="meta small">{[c.handle, c.subscribers].filter(Boolean).join(' • ')}</div>
+        <Show when={c.snippet}>
+          <div class="meta small snippet">{c.snippet}</div>
+        </Show>
+      </div>
+    </div>
+  );
+}
+
 /** Calls `onVisible` whenever this element comes within `margin` of the viewport. */
 export function Sentinel(p: { onVisible: () => void; margin?: string }) {
   let el!: HTMLDivElement;

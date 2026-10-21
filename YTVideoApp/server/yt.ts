@@ -1,4 +1,5 @@
 import { Helpers, Innertube, Log, Parser, YTNodes } from 'youtubei.js';
+import type { SearchFilters } from '../shared/search';
 
 Log.setLevel(Log.Level.NONE);
 
@@ -41,8 +42,8 @@ const api = () => authed ?? anon!;
 
 export type Channel = { name: string; id?: string; avatar?: string };
 export type Card = {
-  kind: 'video' | 'playlist';
-  id: string; // video id, or playlist id for playlists
+  kind: 'video' | 'playlist' | 'channel';
+  id: string; // video id, playlist id for playlists, channel id for channels
   videoId?: string; // first video of a playlist / mix
   title: string;
   thumb?: string;
@@ -52,6 +53,8 @@ export type Card = {
   published?: string;
   badge?: string; // "Mix", "24 videos"
   snippet?: string;
+  handle?: string; // channels only: "@name"
+  subscribers?: string; // channels only
 };
 
 const text = (t: any): string => (t == null ? '' : typeof t === 'string' ? t : (t.toString?.() ?? t.text ?? ''));
@@ -152,12 +155,29 @@ function fromPlaylistVideo(v: any): Card | null {
   };
 }
 
-const WANT = new Set(['LockupView', 'Video', 'CompactVideo', 'GridVideo', 'PlaylistVideo', 'ContinuationItem']);
+/** Search channel result. YouTube puts the @handle in subscriber_count and the subscriber count in video_count, so sort the texts by content. */
+function fromChannel(c: any): Card | null {
+  if (!c.id) return null;
+  const texts = [c.subscriber_count, c.video_count].map(text).filter(Boolean);
+  const avatar = pickImage(c.author?.thumbnails, 136);
+  return {
+    kind: 'channel',
+    id: c.id,
+    title: c.author?.name ?? '',
+    thumb: avatar?.startsWith('//') ? `https:${avatar}` : avatar,
+    handle: texts.find((t) => t.startsWith('@')),
+    subscribers: texts.find((t) => /subscriber/i.test(t)),
+    snippet: text(c.description_snippet) || undefined,
+  };
+}
+
+const WANT = new Set(['LockupView', 'Video', 'Channel', 'CompactVideo', 'GridVideo', 'PlaylistVideo', 'ContinuationItem']);
 const STOP = new Set(['ShortsLockupView', 'ReelShelf', 'ReelItem', 'Post', 'BackstagePost', 'RelatedChipCloud', 'ChipCloud']);
 const SKIP_KEYS = new Set(['endpoint', 'on_tap', 'menu', 'overlays', 'buttons', 'command', 'renderer_context', 'content_image', 'metadata', 'thumbnails', 'author', 'title']);
 
-/** Collect cards + the continuation token from any parsed response subtree, in document order. */
-function collect(root: any): { items: Card[]; cont?: string } {
+/** Collect cards + the continuation token from any parsed response subtree, in document order.
+ *  Channel results are only kept when asked for: other feeds render every card as a video. */
+function collect(root: any, opts: { channels?: boolean } = {}): { items: Card[]; cont?: string } {
   const nodes: any[] = [];
   const walk = (n: any, depth: number) => {
     if (!n || typeof n !== 'object' || depth > 24) return;
@@ -191,7 +211,16 @@ function collect(root: any): { items: Card[]; cont?: string } {
         cont;
       continue;
     }
-    const c = n.type === 'LockupView' ? fromLockup(n) : n.type === 'PlaylistVideo' ? fromPlaylistVideo(n) : fromVideo(n);
+    const c =
+      n.type === 'Channel'
+        ? opts.channels
+          ? fromChannel(n)
+          : null
+        : n.type === 'LockupView'
+          ? fromLockup(n)
+          : n.type === 'PlaylistVideo'
+            ? fromPlaylistVideo(n)
+            : fromVideo(n);
     if (c && !seen.has(c.id)) {
       seen.add(c.id);
       items.push(c);
@@ -239,13 +268,44 @@ export async function browseMore(token: string) {
   return collect([r.on_response_received_actions, r.on_response_received_endpoints, r.continuation_contents]);
 }
 
-export async function search(q: string) {
-  const r: any = await api().actions.execute('/search', { query: q, client: 'WEB', parse: true });
-  return collect(r.contents);
+// SearchFilter protobuf field numbers / enum values (youtubei.js doesn't export its encoder).
+const DATE_ENUM = { today: 2, week: 3, month: 4, year: 5 };
+const TYPE_ENUM = { video: 1, channel: 2, playlist: 3, movie: 4 };
+const DURATION_ENUM = { over_twenty_mins: 2, under_three_mins: 4, three_to_twenty_mins: 5 };
+const FEATURE_FIELD = { hd: 4, subtitles: 5, creative_commons: 6, '3d': 7, purchased: 9, '4k': 14, '360': 15, location: 23, hdr: 25, vr180: 26 };
+
+const varint = (n: number) => {
+  const out: number[] = [];
+  for (; n > 0x7f; n >>>= 7) out.push((n & 0x7f) | 0x80);
+  out.push(n);
+  return out;
+};
+const field = (num: number, v: number) => [...varint(num << 3), ...varint(v)];
+
+/** The `params` blob YouTube's search filter menu sends, or undefined when no filter is set. */
+function searchParams(f: SearchFilters) {
+  const inner = [
+    ...(f.date ? field(1, DATE_ENUM[f.date]) : []),
+    ...(f.type ? field(2, TYPE_ENUM[f.type]) : []),
+    ...(f.duration ? field(3, DURATION_ENUM[f.duration]) : []),
+    ...(f.features ?? []).flatMap((x) => field(FEATURE_FIELD[x], 1)),
+  ];
+  if (!inner.length && !f.sort) return undefined;
+  const bytes = [
+    ...(f.sort ? field(1, 3) : []),
+    ...(inner.length ? [...varint((2 << 3) | 2), ...varint(inner.length), ...inner] : []),
+  ];
+  return btoa(String.fromCharCode(...bytes));
+}
+
+export async function search(q: string, f: SearchFilters = {}) {
+  const query = [q, f.after && `after:${f.after}`, f.before && `before:${f.before}`].filter(Boolean).join(' ');
+  const r: any = await api().actions.execute('/search', { query, params: searchParams(f), client: 'WEB', parse: true });
+  return collect(r.contents, { channels: true });
 }
 export async function searchMore(token: string) {
   const r: any = await api().actions.execute('/search', { continuation: token, client: 'WEB', parse: true });
-  return collect([r.on_response_received_commands, r.on_response_received_actions, r.continuation_contents]);
+  return collect([r.on_response_received_commands, r.on_response_received_actions, r.continuation_contents], { channels: true });
 }
 
 export const suggest = (q: string) => api().getSearchSuggestions(q);

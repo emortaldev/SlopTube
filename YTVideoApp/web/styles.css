@@ -379,6 +379,74 @@ button {
 .results {
   max-width: 1280px;
 }
+.sf {
+  margin-bottom: 16px;
+}
+.sf-bar {
+  display: flex;
+  gap: 8px;
+}
+.sf-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--link);
+  color: #0f0f0f;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+.sf-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px 24px;
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--raised);
+}
+.sf-head {
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.sf-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 0;
+  color: var(--text-2);
+  text-align: left;
+}
+.sf-opt:hover,
+.sf-opt.sel {
+  color: var(--text);
+}
+.sf-opt.sel {
+  font-weight: 500;
+}
+.sf-date {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--text-2);
+}
+.sf-date input {
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
 .lcard {
   display: flex;
   gap: 16px;
@@ -398,6 +466,18 @@ button {
   align-items: center;
   gap: 8px;
   margin: 12px 0;
+}
+.ccard {
+  align-items: center;
+  contain-intrinsic-size: auto 136px;
+}
+.ccard-avatar {
+  display: flex;
+  justify-content: center;
+}
+.ccard-avatar .avatar {
+  width: 136px;
+  height: 136px;
 }
 .snippet {
   white-space: normal;

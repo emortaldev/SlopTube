@@ -1,8 +1,9 @@
 import type { Fmt, Prefs } from '../shared/formats';
+import { filterQuery, type SearchFilters } from '../shared/search';
 
 export type Channel = { name: string; id?: string; avatar?: string };
 export type Card = {
-  kind: 'video' | 'playlist';
+  kind: 'video' | 'playlist' | 'channel';
   id: string;
   videoId?: string;
   title: string;
@@ -13,6 +14,8 @@ export type Card = {
   published?: string;
   badge?: string;
   snippet?: string;
+  handle?: string;
+  subscribers?: string;
 };
 export type Page = { items: Card[]; cont?: string };
 export type Storyboard = { url: string; w: number; h: number; count: number; cols: number; rows: number; interval: number };
@@ -77,7 +80,10 @@ export const api = {
   subscriptions: () => get<Page>('/api/subscriptions'),
   guide: () => get<Channel[]>('/api/guide'),
   browseMore: (t: string) => get<Page>(`/api/browse/more?t=${enc(t)}`),
-  search: (q: string) => get<Page>(`/api/search?q=${enc(q)}`),
+  search: (q: string, f: SearchFilters = {}) => {
+    const fq = filterQuery(f);
+    return get<Page>(`/api/search?q=${enc(q)}${fq ? `&${fq}` : ''}`);
+  },
   searchMore: (t: string) => get<Page>(`/api/search/more?t=${enc(t)}`),
   suggest: (q: string) => get<string[]>(`/api/suggest?q=${enc(q)}`),
   watch: (id: string, list?: string) => get<Watch>(`/api/watch/${id}${list ? `?list=${enc(list)}` : ''}`),

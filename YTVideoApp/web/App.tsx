@@ -1,4 +1,5 @@
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
+import type { SearchFilters } from '../shared/search';
 import { api, avatar } from './api';
 import { Icon } from './icons';
 import { href, navigate, route } from './router';
@@ -47,8 +48,8 @@ export function App() {
           <Match when={route().name === 'watch' && (route() as { v: string; list?: string; t?: number })}>
             {(r) => <Watch v={r().v} list={r().list} t={r().t} />}
           </Match>
-          <Match when={route().name === 'results' && (route() as { q: string })}>
-            {(r) => <Results q={r().q} />}
+          <Match when={route().name === 'results' && (route() as { q: string; f: SearchFilters })}>
+            {(r) => <Results q={r().q} f={r().f} />}
           </Match>
           <Match when={route().name === 'channel' && (route() as { id: string; q?: string })}>
             {(r) => <ChannelView id={r().id} q={r().q} />}

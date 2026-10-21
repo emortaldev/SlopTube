@@ -1,6 +1,7 @@
-import { createEffect, createMemo, createResource, createSignal, For, Index, on, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, For, Index, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { DATES, DURATIONS, FEATURES, filterCount, filterQuery, SORTS, TYPES, type SearchFilters } from '../shared/search';
 import { api, avatar, type Card, type Comment, type Details, type DownloadOption, type Rating } from './api';
-import { CompactCard, createFeed, FeedGrid, hoverPrefetch, ListCard, Sentinel, Spinner, watchHref } from './cards';
+import { ChannelCard, CompactCard, createFeed, FeedGrid, hoverPrefetch, ListCard, Sentinel, Spinner, watchHref } from './cards';
 import { Icon } from './icons';
 import { Player } from './Player';
 import { href, navigate } from './router';
@@ -158,15 +159,19 @@ export function WatchLaterView() {
 
 // ---------- search ----------
 
-export function Results(p: { q: string }) {
+export function Results(p: { q: string; f: SearchFilters }) {
   return (
     <div class="page results" onPointerOver={hoverPrefetch()}>
-      <Show when={p.q} keyed>
-        {(q) => {
-          const feed = createFeed(() => api.search(q), api.searchMore);
+      <SearchFilterBar q={p.q} f={p.f} />
+      {/* Keyed on query + filters so any change starts a fresh feed. */}
+      <Show when={p.q && `${p.q}\n${filterQuery(p.f)}`} keyed>
+        {(_key) => {
+          const q = p.q;
+          const f = p.f;
+          const feed = createFeed(() => api.search(q, f), api.searchMore);
           return (
             <>
-              <For each={feed.items()}>{(c) => <ListCard c={c} />}</For>
+              <For each={feed.items()}>{(c) => (c.kind === 'channel' ? <ChannelCard c={c} /> : <ListCard c={c} />)}</For>
               <Show when={feed.loading()}>
                 <Spinner />
               </Show>
@@ -179,6 +184,83 @@ export function Results(p: { q: string }) {
             </>
           );
         }}
+      </Show>
+    </div>
+  );
+}
+
+type Single = 'date' | 'type' | 'duration' | 'sort';
+
+function SearchFilterBar(p: { q: string; f: SearchFilters }) {
+  const [open, setOpen] = createSignal(filterCount(p.f) > 0);
+  const go = (f: SearchFilters) => navigate(href.results(p.q, f));
+  const pickOne = <K extends Single>(k: K, v: SearchFilters[K]) =>
+    go({ ...p.f, ...(k === 'date' && { after: undefined, before: undefined }), [k]: p.f[k] === v ? undefined : v });
+  const toggleFeature = (x: keyof typeof FEATURES) => {
+    const fs = p.f.features ?? [];
+    go({ ...p.f, features: fs.includes(x) ? fs.filter((y) => y !== x) : [...fs, x] });
+  };
+  const setRange = (k: 'after' | 'before', v: string) => go({ ...p.f, date: undefined, [k]: v || undefined });
+
+  const Col = (c: { title: string; children: JSX.Element }) => (
+    <div class="sf-col">
+      <div class="sf-head">{c.title}</div>
+      {c.children}
+    </div>
+  );
+  const Opt = (o: { sel: boolean; label: string; onClick: () => void }) => (
+    <button class="sf-opt" classList={{ sel: o.sel }} onClick={o.onClick}>
+      {o.label}
+      <Show when={o.sel}>
+        <Icon name="close" size={16} />
+      </Show>
+    </button>
+  );
+  const opts = <K extends Single>(k: K, table: Record<string, string>) => (
+    <For each={Object.entries(table)}>
+      {([v, label]) => <Opt sel={p.f[k] === v} label={label} onClick={() => pickOne(k, v as SearchFilters[K])} />}
+    </For>
+  );
+
+  return (
+    <div class="sf">
+      <div class="sf-bar">
+        <button class="pill" classList={{ on: open() }} onClick={() => setOpen(!open())}>
+          <Icon name="tune" size={20} />
+          Filters
+          <Show when={filterCount(p.f)}>{(n) => <span class="sf-count">{n()}</span>}</Show>
+        </button>
+        <Show when={filterCount(p.f)}>
+          <button class="pill" onClick={() => go({})}>
+            Clear filters
+          </button>
+        </Show>
+      </div>
+      <Show when={open()}>
+        <div class="sf-panel">
+          <Col title="Upload date">
+            {opts('date', DATES)}
+            <label class="sf-date">
+              <span>After</span>
+              <input type="date" value={p.f.after ?? ''} max={p.f.before} onChange={(e) => setRange('after', e.currentTarget.value)} />
+            </label>
+            <label class="sf-date">
+              <span>Before</span>
+              <input type="date" value={p.f.before ?? ''} min={p.f.after} onChange={(e) => setRange('before', e.currentTarget.value)} />
+            </label>
+          </Col>
+          <Col title="Type">{opts('type', TYPES)}</Col>
+          <Col title="Duration">{opts('duration', DURATIONS)}</Col>
+          <Col title="Features">
+            <For each={Object.entries(FEATURES) as [keyof typeof FEATURES, string][]}>
+              {([x, label]) => <Opt sel={!!p.f.features?.includes(x)} label={label} onClick={() => toggleFeature(x)} />}
+            </For>
+          </Col>
+          <Col title="Prioritize">
+            <Opt sel={!p.f.sort} label="Relevance" onClick={() => go({ ...p.f, sort: undefined })} />
+            {opts('sort', SORTS)}
+          </Col>
+        </div>
       </Show>
     </div>
   );

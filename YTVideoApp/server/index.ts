@@ -1,4 +1,5 @@
 import type { Codec } from '../shared/formats';
+import { parseFilters } from '../shared/search';
 import * as download from './download';
 import { fast, prefetch, resolve, stream } from './stream';
 import * as yt from './yt';
@@ -46,7 +47,7 @@ const server = Bun.serve({
     '/api/subscriptions': guard(async () => json(await yt.subscriptions())),
     '/api/guide': guard(async () => json(await yt.guide(), 600)),
     '/api/browse/more': guard(async (req) => json(await yt.browseMore(qp(req, 't')))),
-    '/api/search': guard(async (req) => json(await yt.search(qp(req, 'q')), 300)),
+    '/api/search': guard(async (req) => json(await yt.search(qp(req, 'q'), parseFilters(new URL(req.url).searchParams)), 300)),
     '/api/search/more': guard(async (req) => json(await yt.searchMore(qp(req, 't')))),
     '/api/suggest': guard(async (req) => json(await yt.suggest(qp(req, 'q')), 300)),
     '/api/watch/:id': guard(async (req) => json(await yt.watch(req.params.id, qp(req, 'list') || undefined))),

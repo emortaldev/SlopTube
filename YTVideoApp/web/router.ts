@@ -1,11 +1,12 @@
 import { createSignal } from 'solid-js';
+import { filterQuery, parseFilters, type SearchFilters } from '../shared/search';
 
 export type Route =
   | { name: 'home' }
   | { name: 'subscriptions' }
   | { name: 'watchlater' }
   | { name: 'watch'; v: string; list?: string; t?: number }
-  | { name: 'results'; q: string }
+  | { name: 'results'; q: string; f: SearchFilters }
   | { name: 'channel'; id: string; q?: string };
 
 function parse(): Route {
@@ -14,7 +15,7 @@ function parse(): Route {
   const p = new URLSearchParams(query);
   if (parts[0] === 'watch' && p.get('v'))
     return { name: 'watch', v: p.get('v')!, list: p.get('list') ?? undefined, t: Number(p.get('t')) || undefined };
-  if (parts[0] === 'results') return { name: 'results', q: p.get('q') ?? '' };
+  if (parts[0] === 'results') return { name: 'results', q: p.get('q') ?? '', f: parseFilters(p) };
   if (parts[0] === 'channel' && parts[1]) return { name: 'channel', id: parts[1], q: p.get('q') || undefined };
   if (parts[0] === 'subscriptions') return { name: 'subscriptions' };
   if (parts[0] === 'watchlater') return { name: 'watchlater' };
@@ -30,7 +31,10 @@ export const href = {
   subscriptions: () => '#/subscriptions',
   watchLater: () => '#/watchlater',
   watch: (v: string, list?: string) => `#/watch?v=${v}${list ? `&list=${encodeURIComponent(list)}` : ''}`,
-  results: (q: string) => `#/results?q=${encodeURIComponent(q)}`,
+  results: (q: string, f: SearchFilters = {}) => {
+    const fq = filterQuery(f);
+    return `#/results?q=${encodeURIComponent(q)}${fq ? `&${fq}` : ''}`;
+  },
   channel: (id: string, q?: string) => `#/channel/${encodeURIComponent(id)}${q ? `?q=${encodeURIComponent(q)}` : ''}`,
 };
 
