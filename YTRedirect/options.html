@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>YouTube → local apps</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font: 14px/1.4 system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        max-width: 480px;
+      }
+      label {
+        display: block;
+        margin-bottom: 14px;
+      }
+      label span {
+        display: block;
+        margin-bottom: 4px;
+        font-weight: 600;
+      }
+      label.check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+      }
+      input[type='url'] {
+        box-sizing: border-box;
+        width: 100%;
+        padding: 6px 8px;
+        font: inherit;
+      }
+      small {
+        display: block;
+        margin-top: 4px;
+        opacity: 0.7;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      button {
+        padding: 6px 14px;
+        font: inherit;
+      }
+      #status {
+        min-height: 1.4em;
+        margin: 10px 0 0;
+      }
+      #status.error {
+        color: #d93025;
+      }
+    </style>
+  </head>
+  <body>
+    <form id="form">
+      <label class="check"><input type="checkbox" id="enabled" /> Redirect YouTube links</label>
+      <label>
+        <span>Video app (youtube.com, youtu.be)</span>
+        <input type="url" id="video" placeholder="http://127.0.0.1:8788" required />
+      </label>
+      <label>
+        <span>Music app (music.youtube.com)</span>
+        <input type="url" id="music" placeholder="http://127.0.0.1:8787" required />
+        <small>127.0.0.1 is the device the browser runs on. To use apps on another computer (e.g. from your phone), enter that computer's address, like http://192.168.1.5:8788.</small>
+      </label>
+      <div class="row">
+        <button type="submit">Save</button>
+        <button type="button" id="reset">Reset to defaults</button>
+      </div>
+      <p id="status" role="status"></p>
+    </form>
+    <script src="options.js"></script>
+  </body>
+</html>

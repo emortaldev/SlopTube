@@ -1,13 +1,19 @@
 {
   "manifest_version": 3,
-  "name": "YouTube → local apps",
-  "version": "1.0",
-  "description": "Opens YouTube and YouTube Music links in the local apps on 127.0.0.1. Click the icon to toggle.",
-  "permissions": ["declarativeNetRequest"],
+  "name": "YouTube Redirect",
+  "version": "1.1",
+  "description": "Opens YouTube and YouTube Music links in your local apps (127.0.0.1 by default, configurable). Click the icon to toggle.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "sloptube@emortal.dev",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": { "required": ["none"] }
+    },
+    "gecko_android": { "strict_min_version": "142.0" }
+  },
+  "permissions": ["declarativeNetRequest", "storage"],
   "host_permissions": ["*://*.youtube.com/*", "*://youtu.be/*"],
-  "background": { "service_worker": "background.js" },
+  "background": { "service_worker": "background.js", "scripts": ["background.js"] },
   "action": { "default_title": "Redirect YouTube: on" },
-  "declarative_net_request": {
-    "rule_resources": [{ "id": "redirects", "enabled": true, "path": "rules.json" }]
-  }
+  "options_ui": { "page": "options.html", "open_in_tab": false }
 }
